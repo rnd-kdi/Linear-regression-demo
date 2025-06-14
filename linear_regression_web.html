@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Vẽ đường thẳng gần nhất với các điểm bằng thuật toán hồi quy tuyến tính</title>
+  <style>
+    body { font-family: Arial, sans-serif; background: #f7f7f7; }
+    #container { width: 620px; margin: 40px auto; background: #fff; padding: 24px; border-radius: 10px; box-shadow: 0 2px 8px #ccc; }
+    #canvas { background: #fff; border: 1px solid #aaa; border-radius: 6px; display: block; margin: 0 auto; }
+    #info { margin-top: 16px; font-size: 1.1em; text-align: center; }
+    #reset { margin-top: 10px; display: block; margin-left: auto; margin-right: auto; }
+    p { text-align: center; }
+  </style>
+</head>
+<body>
+  <div id="container">
+    <h2 style="text-align:center;">Vẽ đường gần các điểm nhất bằng thuật toán hồi quy tuyến tính </h2>
+    <canvas id="canvas" width="500" height="400"></canvas>
+    <div id="info"></div>
+    <button id="reset">Xoá</button>
+    <p>Click để thêm điểm!</p>
+  </div>
+  <script>
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    const info = document.getElementById('info');
+    const resetBtn = document.getElementById('reset');
+    let points = [
+      {x: 80, y: 320},
+      {x: 200, y: 200},
+      {x: 350, y: 100}
+    ];
+
+    // Vẽ hệ trục toạ độ với số và grid mờ
+    function drawAxes() {
+      ctx.save();
+      // Vẽ grid mờ
+      ctx.strokeStyle = "#e0e0e0";
+      ctx.lineWidth = 1;
+      for (let i = 0; i <= 10; i++) {
+        // Grid dọc
+        let x = 40 + i * 44;
+        ctx.beginPath();
+        ctx.moveTo(x, 40);
+        ctx.lineTo(x, 360);
+        ctx.stroke();
+        // Grid ngang
+        let y = 360 - i * 32;
+        ctx.beginPath();
+        ctx.moveTo(40, y);
+        ctx.lineTo(480, y);
+        ctx.stroke();
+      }
+
+      // Vẽ trục đậm hơn
+      ctx.strokeStyle = "#bbb";
+      ctx.lineWidth = 1.5;
+      // Trục X
+      ctx.beginPath();
+      ctx.moveTo(40, 360);
+      ctx.lineTo(480, 360);
+      ctx.stroke();
+      // Trục Y
+      ctx.beginPath();
+      ctx.moveTo(40, 360);
+      ctx.lineTo(40, 40);
+      ctx.stroke();
+
+      // Số trên trục X (0 đến 10)
+      ctx.fillStyle = "#444";
+      ctx.font = "12px Arial";
+      for (let i = 0; i <= 10; i++) {
+        let x = 40 + i * 44;
+        ctx.beginPath();
+        ctx.moveTo(x, 355);
+        ctx.lineTo(x, 365);
+        ctx.stroke();
+        ctx.fillText(i, x - 5, 375);
+      }
+      // Số trên trục Y (0 đến 10)
+      for (let i = 0; i <= 10; i++) {
+        let y = 360 - i * 32;
+        ctx.beginPath();
+        ctx.moveTo(35, y);
+        ctx.lineTo(45, y);
+        ctx.stroke();
+        ctx.fillText(i, 15, y + 5);
+      }
+      ctx.restore();
+    }
+
+    // Chuyển đổi toạ độ thực sang toạ độ canvas
+    function toCanvas(x, y) {
+      // x: 0-10 -> 40-480, y: 0-10 -> 360-40
+      return {
+        x: 40 + x * 44,
+        y: 360 - y * 32
+      };
+    }
+    // Chuyển đổi toạ độ canvas sang toạ độ thực
+    function toReal(x, y) {
+      return {
+        x: (x - 40) / 44,
+        y: (360 - y) / 32
+      };
+    }
+
+    function draw() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      drawAxes();
+
+      // Draw points
+      ctx.fillStyle = 'blue';
+      for (const p of points) {
+        const c = toCanvas(p.x, p.y);
+        ctx.beginPath();
+        ctx.arc(c.x, c.y, 6, 0, 2 * Math.PI);
+        ctx.fill();
+      }
+      // Fit and draw regression line if at least 2 points
+      if (points.length >= 2) {
+        const {w, b, loss} = fitLine(points);
+        // Draw regression line (trong khoảng x=0 đến x=10)
+        ctx.strokeStyle = 'red';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        let c0 = toCanvas(0, w * 0 + b);
+        let c1 = toCanvas(10, w * 10 + b);
+        ctx.moveTo(c0.x, c0.y);
+        ctx.lineTo(c1.x, c1.y);
+        ctx.stroke();
+        // Show equation and loss
+        info.innerHTML = `<span style="color:green;">y = ${w.toFixed(2)}x + ${b.toFixed(2)}</span> &nbsp; <span style="color:purple;">Độ lệch: ${loss.toFixed(4)}</span>`;
+      } else {
+        info.innerHTML = "Add at least 2 points.";
+      }
+    }
+
+    function fitLine(pts) {
+      const n = pts.length;
+      let sumX = 0, sumY = 0, sumXY = 0, sumXX = 0;
+      for (const p of pts) {
+        sumX += p.x;
+        sumY += p.y;
+        sumXY += p.x * p.y;
+        sumXX += p.x * p.x;
+      }
+      const w = (n * sumXY - sumX * sumY) / (n * sumXX - sumX * sumX);
+      const b = (sumY - w * sumX) / n;
+      // Compute loss (MSE)
+      let loss = 0;
+      for (const p of pts) {
+        const y_pred = w * p.x + b;
+        loss += (p.y - y_pred) ** 2;
+      }
+      loss /= n;
+      return {w, b, loss};
+    }
+
+    canvas.addEventListener('click', function(e) {
+      const rect = canvas.getBoundingClientRect();
+      const cx = e.clientX - rect.left;
+      const cy = e.clientY - rect.top;
+      // Chỉ cho phép click trong vùng trục
+      if (cx < 40 || cx > 480 || cy < 40 || cy > 360) return;
+      const real = toReal(cx, cy);
+      points.push({x: real.x, y: real.y});
+      draw();
+    });
+
+    resetBtn.onclick = function() {
+      points = [];
+      draw();
+    };
+
+    // Khởi tạo với các điểm mẫu
+    points = [
+      {x: 3, y: 3},
+      {x: 6, y: 6},
+      {x: 9, y: 9}
+    ];
+
+    draw();
+  </script>
+</body>
+</html>
